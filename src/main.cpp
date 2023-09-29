@@ -86,4 +86,5 @@ void doBuzzerWarning() {
       tone(PIN_BUZZER, melody[i], melodyDurations[i]);
       delay(melodyDurations[i] * 1.3);
     }
+  noTone(PIN_BUZZER);
 }
