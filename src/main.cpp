@@ -7,12 +7,12 @@
 #define PIN_LED_RED 23    // GPIO23
 #define PIN_LED_GREEN 22  // GPIO22
 #define PIN_LED_BLUE 21   // GPIO21
-#define SERVO_PIN 26      // GPIO26
+#define PIN_SERVO 33      // GPIO33
 
 #define QUARTER_NOTE 1000
 #define GOOD_GAS_VALUE 500
 #define WARNING_GAS_VALUE 700
-#define TIME_TO_ACTIVATE_ALERTS 5
+#define TIME_TO_ACTIVATE_ALERTS 50
 
 const float melody[] = {
     NOTE_E4, NOTE_D4, NOTE_C4, NOTE_D4, NOTE_E4, NOTE_E4, NOTE_E4,
@@ -35,20 +35,21 @@ void setupRRGLed();
 void setupServo();
 int readMQ2Value();
 void greenLedOn();
-void yellowLedOn();
+void orangeLedOn();
 void redLedOn();
 void doBuzzerWarning();
 void doServoActivation();
 void doServoDeactivation();
 void resetTimeAfterWarning();
 void increaseTimeAfterWarning();
-void getGasValue();
+void showGasValue(int gasValue);
 
 void setup()
 {
   setupMQ2();
   setupRRGLed();
   setupServo();
+  Serial.println("Setup completed");
 }
 
 void loop()
@@ -62,7 +63,7 @@ void loop()
   }
   else if (gasValue < WARNING_GAS_VALUE)
   {
-    yellowLedOn();
+    orangeLedOn();
   }
   else
   {
@@ -74,7 +75,7 @@ void loop()
       doServoActivation();
     }
   }
-  getGasValue();
+  showGasValue(gasValue);
 }
 
 void setupMQ2()
@@ -86,6 +87,7 @@ void setupMQ2()
 
 void setupRRGLed()
 {
+  Serial.println("Setting up the RGB LED");
   pinMode(PIN_LED_RED, OUTPUT);
   pinMode(PIN_LED_GREEN, OUTPUT);
   pinMode(PIN_LED_BLUE, OUTPUT);
@@ -93,7 +95,8 @@ void setupRRGLed()
 
 void setupServo()
 {
-  servoMotor.attach(SERVO_PIN);
+  Serial.println("Setting up the servo motor");
+  servoMotor.attach(PIN_SERVO, 500, 2400);
   servoMotor.write(0);
 }
 
@@ -104,27 +107,29 @@ int readMQ2Value()
 
 void greenLedOn()
 {
-  digitalWrite(PIN_LED_GREEN, HIGH);
+  analogWrite(PIN_LED_RED, 0);
+  analogWrite(PIN_LED_GREEN, 255);
+  analogWrite(PIN_LED_BLUE, 0);
 }
 
-void yellowLedOn()
+void orangeLedOn()
 {
-  digitalWrite(PIN_LED_RED, HIGH);
-  digitalWrite(PIN_LED_GREEN, HIGH);
+  analogWrite(PIN_LED_RED, 255);
+  analogWrite(PIN_LED_GREEN, 165);
+  analogWrite(PIN_LED_BLUE, 0);
 }
 
 void redLedOn()
 {
-  digitalWrite(PIN_LED_RED, HIGH);
+  analogWrite(PIN_LED_RED, 255);
+  analogWrite(PIN_LED_GREEN, 0);
+  analogWrite(PIN_LED_BLUE, 0);
 }
 
 void doBuzzerWarning()
 {
-  for (int i = 0; i < sizeof(melody) / sizeof(melody[0]); i++)
-  {
-    tone(PIN_BUZZER, melody[i], melodyDurations[i]);
-    delay(melodyDurations[i] * 1.3);
-  }
+  tone(PIN_BUZZER, melody[0], melodyDurations[0]);
+  delay(melodyDurations[0] * 1.3);
   noTone(PIN_BUZZER);
 }
 
@@ -143,7 +148,7 @@ void doServoActivation()
 
 void doServoDeactivation()
 {
-  if (currentServoPosition == 180)
+  if (currentServoPosition == 180 && timeAfterWarning == 0)
   {
     for (int pos = 180; pos >= 0; pos -= 1)
     {
@@ -167,8 +172,8 @@ void increaseTimeAfterWarning()
   timeAfterWarning++;
 }
 
-void getGasValue()
+void showGasValue(int gasValue)
 {
   Serial.print("Gas value: ");
-  Serial.println(readMQ2Value());
+  Serial.println(gasValue);
 }
