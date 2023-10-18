@@ -2,29 +2,21 @@
 #include <pitches.h>
 #include <ESP32Servo.h>
 
-#define PIN_MQ2_ANALOG 36 // GPIO36
-#define PIN_BUZZER 5      // GPIO5
-#define PIN_LED_RED 23    // GPIO23
-#define PIN_LED_GREEN 22  // GPIO22
-#define PIN_LED_BLUE 21   // GPIO21
-#define PIN_SERVO 33      // GPIO33
+#define PIN_MQ2_ANALOG 36 // GPI036
+#define PIN_BUZZER 5      // GPI05
+#define PIN_LED_RED 4     // GPI04
+#define PIN_LED_GREEN 0   // GPI00
+#define PIN_LED_BLUE 2    // GPI02
+#define PIN_SERVO 18      // GPIO18
 
 #define QUARTER_NOTE 1000
 #define GOOD_GAS_VALUE 500
-#define WARNING_GAS_VALUE 700
-#define TIME_TO_ACTIVATE_ALERTS 50
+#define WARNING_GAS_VALUE 1500
+#define TIME_TO_ACTIVATE_ALERTS 10
 
-const float melody[] = {
-    NOTE_E4, NOTE_D4, NOTE_C4, NOTE_D4, NOTE_E4, NOTE_E4, NOTE_E4,
-    NOTE_D4, NOTE_D4, NOTE_D4, NOTE_E4, NOTE_G4, NOTE_G4,
-    NOTE_E4, NOTE_D4, NOTE_C4, NOTE_D4, NOTE_E4, NOTE_E4, NOTE_E4,
-    NOTE_E4, NOTE_D4, NOTE_D4, NOTE_E4, NOTE_D4, NOTE_C4};
+const float melody[] = {NOTE_E4};
 
-const int melodyDurations[] = {
-    QUARTER_NOTE, QUARTER_NOTE, QUARTER_NOTE, QUARTER_NOTE, QUARTER_NOTE, QUARTER_NOTE, QUARTER_NOTE,
-    QUARTER_NOTE, QUARTER_NOTE, QUARTER_NOTE, QUARTER_NOTE, QUARTER_NOTE, QUARTER_NOTE,
-    QUARTER_NOTE, QUARTER_NOTE, QUARTER_NOTE, QUARTER_NOTE, QUARTER_NOTE, QUARTER_NOTE, QUARTER_NOTE,
-    QUARTER_NOTE, QUARTER_NOTE, QUARTER_NOTE, QUARTER_NOTE, QUARTER_NOTE, QUARTER_NOTE};
+const int melodyDurations[] = {QUARTER_NOTE};
 
 Servo servoMotor;
 int currentServoPosition = 0;
@@ -57,16 +49,19 @@ void loop()
   int gasValue = readMQ2Value();
   if (gasValue < GOOD_GAS_VALUE)
   {
+    Serial.println("Good gas value");
     greenLedOn();
     doServoDeactivation();
     resetTimeAfterWarning();
   }
   else if (gasValue < WARNING_GAS_VALUE)
   {
+    Serial.println("Warning gas value");
     orangeLedOn();
   }
   else
   {
+    Serial.println("Dangerous gas value");
     redLedOn();
     increaseTimeAfterWarning();
     if (timeAfterWarning > TIME_TO_ACTIVATE_ALERTS)
@@ -176,4 +171,5 @@ void showGasValue(int gasValue)
 {
   Serial.print("Gas value: ");
   Serial.println(gasValue);
+  delay(1000);
 }
