@@ -1,27 +1,17 @@
 #include <Arduino.h>
-#include <pitches.h>
+#include <WiFi.h>
 #include <ESP32Servo.h>
+#include <PubSubClient.h>
 
-#define PIN_MQ2_ANALOG 36 // GPI036
-#define PIN_BUZZER 5      // GPI05
-#define PIN_LED_RED 4     // GPI04
-#define PIN_LED_GREEN 0   // GPI00
-#define PIN_LED_BLUE 2    // GPI02
-#define PIN_SERVO 18      // GPIO18
-
-#define QUARTER_NOTE 1000
-#define GOOD_GAS_VALUE 500
-#define WARNING_GAS_VALUE 1500
-#define TIME_TO_ACTIVATE_ALERTS 10
-
-const float melody[] = {NOTE_E4};
-
-const int melodyDurations[] = {QUARTER_NOTE};
+#include "config.h"
 
 Servo servoMotor;
 int currentServoPosition = 0;
 int timeAfterWarning = 0;
+WiFiClient espClient;
+PubSubClient client(espClient);
 
+void setupSerial();
 void setupMQ2();
 void setupRRGLed();
 void setupServo();
@@ -35,17 +25,30 @@ void doServoDeactivation();
 void resetTimeAfterWarning();
 void increaseTimeAfterWarning();
 void showGasValue(int gasValue);
+void connectWiFi();
+void reconnectMQTTClient();
+void createMQTTClient();
+void clientCallback(char *topic, byte *payload, unsigned int length);
 
 void setup()
 {
+  setupSerial();
   setupMQ2();
   setupRRGLed();
   setupServo();
+  delay(1000);
+  connectWiFi();
+  createMQTTClient();
   Serial.println("Setup completed");
 }
 
 void loop()
 {
+  // Is this for persistent connection?
+  reconnectMQTTClient();
+  client.loop();
+  delay(1000);
+
   int gasValue = readMQ2Value();
   if (gasValue < GOOD_GAS_VALUE)
   {
@@ -73,9 +76,15 @@ void loop()
   showGasValue(gasValue);
 }
 
-void setupMQ2()
+void setupSerial()
 {
   Serial.begin(9600);
+  while (!Serial)
+    ;
+}
+
+void setupMQ2()
+{
   Serial.println("Warming up the MQ2 sensor");
   delay(20000);
 }
@@ -172,4 +181,64 @@ void showGasValue(int gasValue)
   Serial.print("Gas value: ");
   Serial.println(gasValue);
   delay(1000);
+}
+
+void connectWiFi()
+{
+  Serial.print("Connecting to ");
+  Serial.print(SSID);
+  while (WiFi.status() != WL_CONNECTED)
+  {
+    Serial.print(".");
+    WiFi.begin(SSID, PASSWORD);
+    delay(500);
+  }
+  Serial.println();
+  Serial.print(ID.c_str());
+  Serial.println(" connected!");
+  Serial.print("IP address: ");
+  Serial.println(WiFi.localIP());
+}
+
+void reconnectMQTTClient()
+{
+  while (!client.connected())
+  {
+    Serial.println("Attempting MQTT connection...");
+    if (client.connect(CLIENT_NAME.c_str()))
+    {
+      Serial.print("connected to Broker: ");
+      Serial.println(BROKER.c_str());
+      // Topic(s) subscription
+      client.subscribe(TOPIC.c_str());
+    }
+    else
+    {
+      Serial.print("Retying in 5 seconds - failed, rc=");
+      Serial.println(client.state());
+      delay(5000);
+    }
+  }
+}
+
+void createMQTTClient()
+{
+  client.setServer(BROKER.c_str(), 1883);
+  client.setCallback(clientCallback);
+  reconnectMQTTClient();
+}
+
+void clientCallback(char *topic, byte *payload, unsigned int length)
+{
+  String response;
+
+  for (int i = 0; i < length; i++)
+  {
+    response += (char)payload[i];
+  }
+  Serial.print("Message arrived [");
+  Serial.print(TOPIC.c_str());
+  Serial.print("] ");
+  Serial.println(response);
+  // Handle message arrived
 }
