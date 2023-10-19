@@ -245,7 +245,7 @@ void doBuzzerDeactivation()
 
 void doServoDeactivation()
 {
-  if (currentServoPosition == 180 && timeAfterWarning == 0)
+  if (currentServoPosition == SERVO_MAX_POSITION && timeAfterWarning == 0)
   {
     Serial.println("SmartGas >> Deactivating the servo motor");
     for (int pos = SERVO_MAX_POSITION; pos >= 0; pos -= 1)
