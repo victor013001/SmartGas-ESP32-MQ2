@@ -1,196 +1,101 @@
-#include <Arduino.h>
-#include <WiFi.h>
-#include <ESP32Servo.h>
-#include <PubSubClient.h>
-
 #include "config.h"
 
-Servo servoMotor;
-int currentServoPosition = 0;
-int timeAfterWarning = 0;
-WiFiClient espClient;
-PubSubClient client(espClient);
-
 void setupSerial();
+void setupRGBLed();
+void blueLedOn();
+void connectWiFi();
+void createMQTTClient();
+void clientBuzzerCallback(char *topic, byte *payload, unsigned int length);
+void publishBuzzerStatus(const char *status);
+void reconnectMQTTClient();
 void setupMQ2();
-void setupRRGLed();
 void setupServo();
 int readMQ2Value();
-void greenLedOn();
-void orangeLedOn();
-void redLedOn();
-void doBuzzerWarning();
-void doServoActivation();
-void doServoDeactivation();
-void resetTimeAfterWarning();
-void increaseTimeAfterWarning();
+void persistMQTTConnection();
 void showGasValue(int gasValue);
-void connectWiFi();
-void reconnectMQTTClient();
-void createMQTTClient();
-void clientCallback(char *topic, byte *payload, unsigned int length);
+void publishGasValue(int gasValue);
+bool isMQ2ValueGood(int gasValue);
+void goodMQ2ValueActions();
+void greenLedOn();
+void reduceTimeAfterWarning();
+void doBuzzerDeactivation();
+void doServoDeactivation();
+bool isMQ2ValueWarning(int gasValue);
+void warningMQ2ValueActions();
+void orangeLedOn();
+void emergencyMQ2ValueActions();
+void redLedOn();
+void increaseTimeAfterWarning();
+void doBuzzerActivation();
+void doServoActivation();
+void activateBuzzerIfNeeded();
+void doBuzzerWarning();
+void stopBuzzerWarning();
 
 void setup()
 {
   setupSerial();
-  setupMQ2();
-  setupRRGLed();
-  setupServo();
-  delay(1000);
+  setupRGBLed();
+  blueLedOn();
   connectWiFi();
   createMQTTClient();
-  Serial.println("Setup completed");
+  setupMQ2();
+  setupServo();
+  Serial.println("SmartGas >> Setup completed");
 }
 
 void loop()
 {
-  // Is this for persistent connection?
-  reconnectMQTTClient();
-  client.loop();
-  delay(1000);
-
+  persistMQTTConnection();
   int gasValue = readMQ2Value();
-  if (gasValue < GOOD_GAS_VALUE)
+  showGasValue(gasValue);
+  if (isMQ2ValueGood(gasValue))
   {
-    Serial.println("Good gas value");
-    greenLedOn();
-    doServoDeactivation();
-    resetTimeAfterWarning();
+    goodMQ2ValueActions();
   }
-  else if (gasValue < WARNING_GAS_VALUE)
+  else if (isMQ2ValueWarning(gasValue))
   {
-    Serial.println("Warning gas value");
-    orangeLedOn();
+    warningMQ2ValueActions();
   }
   else
   {
-    Serial.println("Dangerous gas value");
-    redLedOn();
-    increaseTimeAfterWarning();
-    if (timeAfterWarning > TIME_TO_ACTIVATE_ALERTS)
-    {
-      doBuzzerWarning();
-      doServoActivation();
-    }
+    emergencyMQ2ValueActions();
   }
-  showGasValue(gasValue);
+  activateBuzzerIfNeeded();
 }
 
 void setupSerial()
 {
-  Serial.begin(9600);
+  Serial.println("SmartGas >> Setting up the serial");
+  Serial.begin(MONITOR_SPEED);
   while (!Serial)
     ;
+  delay(SERIAL_DELAY);
 }
 
-void setupMQ2()
+void setupRGBLed()
 {
-  Serial.println("Warming up the MQ2 sensor");
-  delay(20000);
-}
-
-void setupRRGLed()
-{
-  Serial.println("Setting up the RGB LED");
+  Serial.println("SmartGas >> Setting up the RGB LED");
   pinMode(PIN_LED_RED, OUTPUT);
   pinMode(PIN_LED_GREEN, OUTPUT);
   pinMode(PIN_LED_BLUE, OUTPUT);
 }
 
-void setupServo()
-{
-  Serial.println("Setting up the servo motor");
-  servoMotor.attach(PIN_SERVO, 500, 2400);
-  servoMotor.write(0);
-}
-
-int readMQ2Value()
-{
-  return analogRead(PIN_MQ2_ANALOG);
-}
-
-void greenLedOn()
+void blueLedOn()
 {
   analogWrite(PIN_LED_RED, 0);
-  analogWrite(PIN_LED_GREEN, 255);
-  analogWrite(PIN_LED_BLUE, 0);
-}
-
-void orangeLedOn()
-{
-  analogWrite(PIN_LED_RED, 255);
-  analogWrite(PIN_LED_GREEN, 165);
-  analogWrite(PIN_LED_BLUE, 0);
-}
-
-void redLedOn()
-{
-  analogWrite(PIN_LED_RED, 255);
   analogWrite(PIN_LED_GREEN, 0);
-  analogWrite(PIN_LED_BLUE, 0);
-}
-
-void doBuzzerWarning()
-{
-  tone(PIN_BUZZER, melody[0], melodyDurations[0]);
-  delay(melodyDurations[0] * 1.3);
-  noTone(PIN_BUZZER);
-}
-
-void doServoActivation()
-{
-  if (currentServoPosition == 0)
-  {
-    for (int pos = 0; pos <= 180; pos += 1)
-    {
-      servoMotor.write(pos);
-      delay(15);
-    }
-    currentServoPosition = 180;
-  }
-}
-
-void doServoDeactivation()
-{
-  if (currentServoPosition == 180 && timeAfterWarning == 0)
-  {
-    for (int pos = 180; pos >= 0; pos -= 1)
-    {
-      servoMotor.write(pos);
-      delay(15);
-    }
-    currentServoPosition = 0;
-  }
-}
-
-void resetTimeAfterWarning()
-{
-  if (timeAfterWarning > 0)
-  {
-    timeAfterWarning--;
-  }
-}
-
-void increaseTimeAfterWarning()
-{
-  timeAfterWarning++;
-}
-
-void showGasValue(int gasValue)
-{
-  Serial.print("Gas value: ");
-  Serial.println(gasValue);
-  delay(1000);
+  analogWrite(PIN_LED_BLUE, 255);
 }
 
 void connectWiFi()
 {
-  Serial.print("Connecting to ");
+  Serial.print("SmartGas >> Connecting to ");
   Serial.print(SSID);
+  WiFi.begin(SSID, PASSWORD);
   while (WiFi.status() != WL_CONNECTED)
   {
     Serial.print(".");
-    WiFi.begin(SSID, PASSWORD);
     delay(500);
   }
   Serial.println();
@@ -200,17 +105,52 @@ void connectWiFi()
   Serial.println(WiFi.localIP());
 }
 
+void createMQTTClient()
+{
+  Serial.println("SmartGas >> Creating MQTT client");
+  client.setServer(BROKER.c_str(), PORT);
+  client.setCallback(clientBuzzerCallback);
+  reconnectMQTTClient();
+}
+
+void clientBuzzerCallback(char *topic, byte *payload, unsigned int length)
+{
+  String response;
+  for (int i = 0; i < length; i++)
+  {
+    response += (char)payload[i];
+  }
+  Serial.print("Message arrived [");
+  Serial.print(BUZZER_TOPIC.c_str());
+  Serial.print("]: ");
+  if (response == BUZZER_OFF_MESSAGE)
+  {
+    publishBuzzerStatus(response.c_str());
+    Serial.println(response);
+    isBuzzerActive = false;
+  }
+  else
+  {
+    Serial.println("Invalid message received. Expected: OFF");
+  }
+}
+
+void publishBuzzerStatus(const char *status)
+{
+  // How to send QoS 1?
+  client.publish(BUZZER_STATUS_TOPIC.c_str(), status);
+}
+
 void reconnectMQTTClient()
 {
   while (!client.connected())
   {
-    Serial.println("Attempting MQTT connection...");
+    Serial.println("SmartGas >> Attempting MQTT connection...");
     if (client.connect(CLIENT_NAME.c_str()))
     {
-      Serial.print("connected to Broker: ");
+      Serial.print("Connected to Broker: ");
       Serial.println(BROKER.c_str());
-      // Topic(s) subscription
-      client.subscribe(TOPIC.c_str());
+      client.subscribe(BUZZER_TOPIC.c_str(), 1);
     }
     else
     {
@@ -221,24 +161,186 @@ void reconnectMQTTClient()
   }
 }
 
-void createMQTTClient()
+void persistMQTTConnection()
 {
-  client.setServer(BROKER.c_str(), 1883);
-  client.setCallback(clientCallback);
+  // Is this for persistent connection?
   reconnectMQTTClient();
+  client.loop();
+  delay(PERSIST_MQTT_CONNECTION_DELAY);
 }
 
-void clientCallback(char *topic, byte *payload, unsigned int length)
+void setupMQ2()
 {
-  String response;
+  Serial.println("SmartGas >> Warming up the MQ2 sensor");
+  delay(MQ2_WARM_UP_TIME);
+}
 
-  for (int i = 0; i < length; i++)
+void setupServo()
+{
+  Serial.println("SmartGas >> Setting up the servo motor");
+  servoMotor.attach(PIN_SERVO, 500, 2400);
+  servoMotor.write(0);
+}
+
+int readMQ2Value()
+{
+  return analogRead(PIN_MQ2_ANALOG);
+}
+
+void showGasValue(int gasValue)
+{
+  Serial.print("Gas value: ");
+  Serial.println(gasValue);
+  publishGasValue(gasValue);
+  delay(GAS_READ_VALUE_DELAY);
+}
+
+bool isMQ2ValueGood(int gasValue)
+{
+  return gasValue < GOOD_GAS_VALUE;
+}
+
+void goodMQ2ValueActions()
+{
+  greenLedOn();
+  reduceTimeAfterWarning();
+  if (timeAfterWarning == 0)
   {
-    response += (char)payload[i];
+    doBuzzerDeactivation();
+    doServoDeactivation();
   }
-  Serial.print("Message arrived [");
-  Serial.print(TOPIC.c_str());
-  Serial.print("] ");
-  Serial.println(response);
-  // Handle message arrived
+}
+
+void publishGasValue(int gasValue)
+{
+  char gasValueStr[10];
+  sprintf(gasValueStr, "%d", gasValue);
+  client.publish(MQ2_TOPIC.c_str(), gasValueStr);
+}
+
+void greenLedOn()
+{
+  analogWrite(PIN_LED_RED, 0);
+  analogWrite(PIN_LED_GREEN, 255);
+  analogWrite(PIN_LED_BLUE, 0);
+}
+
+void reduceTimeAfterWarning()
+{
+  if (timeAfterWarning > 0)
+  {
+    timeAfterWarning--;
+  }
+}
+
+void doBuzzerDeactivation()
+{
+  if (isBuzzerActive)
+  {
+    isBuzzerActive = false;
+    userDeactivatedBuzzer = false;
+    publishBuzzerStatus(BUZZER_OFF_MESSAGE);
+  }
+}
+
+void doServoDeactivation()
+{
+  if (currentServoPosition == 180 && timeAfterWarning == 0)
+  {
+    Serial.println("SmartGas >> Deactivating the servo motor");
+    for (int pos = SERVO_MAX_POSITION; pos >= 0; pos -= 1)
+    {
+      servoMotor.write(pos);
+      delay(SERVO_DELAY);
+    }
+    currentServoPosition = 0;
+  }
+}
+
+bool isMQ2ValueWarning(int gasValue)
+{
+  return gasValue >= GOOD_GAS_VALUE && gasValue < WARNING_GAS_VALUE;
+}
+
+void warningMQ2ValueActions()
+{
+  orangeLedOn();
+}
+
+void orangeLedOn()
+{
+  analogWrite(PIN_LED_RED, 255);
+  analogWrite(PIN_LED_GREEN, 165);
+  analogWrite(PIN_LED_BLUE, 0);
+}
+
+void emergencyMQ2ValueActions()
+{
+  redLedOn();
+  increaseTimeAfterWarning();
+  if (timeAfterWarning > TIME_TO_ACTIVATE_ALERTS)
+  {
+    doBuzzerActivation();
+    doServoActivation();
+  }
+}
+
+void redLedOn()
+{
+  analogWrite(PIN_LED_RED, 255);
+  analogWrite(PIN_LED_GREEN, 0);
+  analogWrite(PIN_LED_BLUE, 0);
+}
+
+void increaseTimeAfterWarning()
+{
+  timeAfterWarning++;
+}
+
+void doBuzzerActivation()
+{
+  if (!isBuzzerActive)
+  {
+    publishBuzzerStatus(BUZZER_ON_MESSAGE);
+  }
+  if (!userDeactivatedBuzzer)
+  {
+    isBuzzerActive = true;
+  }
+}
+
+void doServoActivation()
+{
+  if (currentServoPosition == 0)
+  {
+    Serial.println("SmartGas >> Activating the servo motor");
+    for (int pos = 0; pos <= SERVO_MAX_POSITION; pos += 1)
+    {
+      servoMotor.write(pos);
+      delay(SERVO_DELAY);
+    }
+    currentServoPosition = SERVO_MAX_POSITION;
+  }
+}
+
+void activateBuzzerIfNeeded()
+{
+  if (isBuzzerActive)
+  {
+    doBuzzerWarning();
+  }
+  else
+  {
+    stopBuzzerWarning();
+  }
+}
+
+void doBuzzerWarning()
+{
+  tone(PIN_BUZZER, melody[0], melodyDurations[0]);
+}
+
+void stopBuzzerWarning()
+{
+  noTone(PIN_BUZZER);
 }
