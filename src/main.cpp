@@ -9,7 +9,6 @@ void clientBuzzerCallback(char *topic, byte *payload, unsigned int length);
 void publishBuzzerStatus(const char *status);
 void reconnectMQTTClient();
 void setupMQ2();
-void setupServo();
 int readMQ2Value();
 void persistMQTTConnection();
 void showGasValue(int gasValue);
@@ -19,7 +18,7 @@ void goodMQ2ValueActions();
 void greenLedOn();
 void reduceTimeAfterWarning();
 void doBuzzerDeactivation();
-void doServoDeactivation();
+void publishServoStatus(const char *status);
 bool isMQ2ValueWarning(int gasValue);
 void warningMQ2ValueActions();
 void orangeLedOn();
@@ -27,7 +26,6 @@ void emergencyMQ2ValueActions();
 void redLedOn();
 void increaseTimeAfterWarning();
 void doBuzzerActivation();
-void doServoActivation();
 void activateBuzzerIfNeeded();
 void doBuzzerWarning();
 void stopBuzzerWarning();
@@ -40,7 +38,6 @@ void setup()
   connectWiFi();
   createMQTTClient();
   setupMQ2();
-  setupServo();
   Serial.println("SmartGas >> Setup completed");
 }
 
@@ -79,6 +76,11 @@ void setupRGBLed()
   pinMode(PIN_LED_RED, OUTPUT);
   pinMode(PIN_LED_GREEN, OUTPUT);
   pinMode(PIN_LED_BLUE, OUTPUT);
+  // Si tira error ahi de que no se inicializo toca cambiar por esto
+  //  ledcSetup(0, 5000, 8);
+  //  ledcAttachPin(PIN_LED_RED, 0);
+  //  ledcAttachPin(PIN_LED_GREEN, 1);
+  //  ledcAttachPin(PIN_LED_BLUE, 2);
 }
 
 void blueLedOn()
@@ -175,13 +177,6 @@ void setupMQ2()
   delay(MQ2_WARM_UP_TIME);
 }
 
-void setupServo()
-{
-  Serial.println("SmartGas >> Setting up the servo motor");
-  servoMotor.attach(PIN_SERVO, 500, 2400);
-  servoMotor.write(0);
-}
-
 int readMQ2Value()
 {
   return analogRead(PIN_MQ2_ANALOG);
@@ -207,7 +202,11 @@ void goodMQ2ValueActions()
   if (timeAfterWarning == 0)
   {
     doBuzzerDeactivation();
-    doServoDeactivation();
+    if (isServoActive)
+    {
+      publishServoStatus(SERVO_OFF_MESSAGE);
+      isServoActive = false;
+    }
   }
 }
 
@@ -243,18 +242,10 @@ void doBuzzerDeactivation()
   }
 }
 
-void doServoDeactivation()
+void publishServoStatus(const char *status)
 {
-  if (currentServoPosition == SERVO_MAX_POSITION && timeAfterWarning == 0)
-  {
-    Serial.println("SmartGas >> Deactivating the servo motor");
-    for (int pos = SERVO_MAX_POSITION; pos >= 0; pos -= 1)
-    {
-      servoMotor.write(pos);
-      delay(SERVO_DELAY);
-    }
-    currentServoPosition = 0;
-  }
+  // How to send QoS 1?
+  client.publish(SERVO_TOPIC.c_str(), status);
 }
 
 bool isMQ2ValueWarning(int gasValue)
@@ -281,7 +272,8 @@ void emergencyMQ2ValueActions()
   if (timeAfterWarning > TIME_TO_ACTIVATE_ALERTS)
   {
     doBuzzerActivation();
-    doServoActivation();
+    publishServoStatus(SERVO_ON_MESSAGE);
+    isServoActive = true;
   }
 }
 
@@ -306,20 +298,6 @@ void doBuzzerActivation()
   if (!userDeactivatedBuzzer)
   {
     isBuzzerActive = true;
-  }
-}
-
-void doServoActivation()
-{
-  if (currentServoPosition == 0)
-  {
-    Serial.println("SmartGas >> Activating the servo motor");
-    for (int pos = 0; pos <= SERVO_MAX_POSITION; pos += 1)
-    {
-      servoMotor.write(pos);
-      delay(SERVO_DELAY);
-    }
-    currentServoPosition = SERVO_MAX_POSITION;
   }
 }
 
