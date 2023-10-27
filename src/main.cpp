@@ -7,8 +7,10 @@ void connectWiFi();
 void createMQTTClient();
 void clientBuzzerCallback(char *topic, byte *payload, unsigned int length);
 void publishBuzzerStatus(const char *status);
+void stopBuzzerWarning();
 void reconnectMQTTClient();
 void setupMQ2();
+void setupBuzzer();
 int readMQ2Value();
 void persistMQTTConnection();
 void showGasValue(int gasValue);
@@ -26,9 +28,8 @@ void emergencyMQ2ValueActions();
 void redLedOn();
 void increaseTimeAfterWarning();
 void doBuzzerActivation();
-void activateBuzzerIfNeeded();
 void doBuzzerWarning();
-void stopBuzzerWarning();
+void activateBuzzerIfNeeded();
 
 void setup()
 {
@@ -38,6 +39,7 @@ void setup()
   connectWiFi();
   createMQTTClient();
   setupMQ2();
+  setupBuzzer();
   Serial.println("SmartGas >> Setup completed");
 }
 
@@ -63,24 +65,27 @@ void loop()
 
 void setupSerial()
 {
-  Serial.println("SmartGas >> Setting up the serial");
   Serial.begin(MONITOR_SPEED);
   while (!Serial)
     ;
   delay(SERIAL_DELAY);
+  Serial.println();
+  Serial.print("SmartGas >> Serial setup with speed: ");
+  Serial.println(MONITOR_SPEED);
 }
 
 void setupRGBLed()
 {
-  Serial.println("SmartGas >> Setting up the RGB LED");
+  Serial.print("SmartGas >> Setting up the RGB LED, pins: ");
+  Serial.print("Red: ");
+  Serial.print(PIN_LED_RED);
+  Serial.print(", Green: ");
+  Serial.print(PIN_LED_GREEN);
+  Serial.print(", Blue: ");
+  Serial.println(PIN_LED_BLUE);
   pinMode(PIN_LED_RED, OUTPUT);
   pinMode(PIN_LED_GREEN, OUTPUT);
   pinMode(PIN_LED_BLUE, OUTPUT);
-  // Si tira error ahi de que no se inicializo toca cambiar por esto
-  //  ledcSetup(0, 5000, 8);
-  //  ledcAttachPin(PIN_LED_RED, 0);
-  //  ledcAttachPin(PIN_LED_GREEN, 1);
-  //  ledcAttachPin(PIN_LED_BLUE, 2);
 }
 
 void blueLedOn()
@@ -125,11 +130,12 @@ void clientBuzzerCallback(char *topic, byte *payload, unsigned int length)
   Serial.print("Message arrived [");
   Serial.print(BUZZER_TOPIC.c_str());
   Serial.print("]: ");
-  if (response == BUZZER_OFF_MESSAGE)
+  if (response == BUZZER_OFF_MESSAGE && isBuzzerActive)
   {
-    publishBuzzerStatus(response.c_str());
     Serial.println(response);
-    isBuzzerActive = false;
+    stopBuzzerWarning();
+    publishBuzzerStatus(response.c_str());
+    userDeactivatedBuzzer = true;
   }
   else
   {
@@ -139,8 +145,13 @@ void clientBuzzerCallback(char *topic, byte *payload, unsigned int length)
 
 void publishBuzzerStatus(const char *status)
 {
-  // How to send QoS 1?
   client.publish(BUZZER_STATUS_TOPIC.c_str(), status);
+}
+
+void stopBuzzerWarning()
+{
+  noTone(PIN_BUZZER);
+  isBuzzerActive = false;
 }
 
 void reconnectMQTTClient()
@@ -165,7 +176,6 @@ void reconnectMQTTClient()
 
 void persistMQTTConnection()
 {
-  // Is this for persistent connection?
   reconnectMQTTClient();
   client.loop();
   delay(PERSIST_MQTT_CONNECTION_DELAY);
@@ -173,8 +183,21 @@ void persistMQTTConnection()
 
 void setupMQ2()
 {
-  Serial.println("SmartGas >> Warming up the MQ2 sensor");
+  Serial.print("SmartGas >> Warming up the MQ2 sensor on pin: ");
+  Serial.print(PIN_MQ2_ANALOG);
+  Serial.print(" for ");
+  Serial.print(MQ2_WARM_UP_TIME);
+  Serial.println(" ms");
   delay(MQ2_WARM_UP_TIME);
+}
+
+void setupBuzzer()
+{
+  Serial.print("SmartGas >> Setting up the buzzer on pin: ");
+  Serial.print(PIN_BUZZER);
+  Serial.println(" with a frequency of 5000 Hz and a resolution of 8 bits on channel 0");
+  ledcSetup(0, 5000, 8);
+  ledcAttachPin(PIN_BUZZER, 0);
 }
 
 int readMQ2Value()
@@ -201,7 +224,11 @@ void goodMQ2ValueActions()
   reduceTimeAfterWarning();
   if (timeAfterWarning == 0)
   {
-    doBuzzerDeactivation();
+    if (isBuzzerActive)
+    {
+      doBuzzerDeactivation();
+      userDeactivatedBuzzer = false;
+    }
     if (isServoActive)
     {
       publishServoStatus(SERVO_OFF_MESSAGE);
@@ -244,7 +271,6 @@ void doBuzzerDeactivation()
 
 void publishServoStatus(const char *status)
 {
-  // How to send QoS 1?
   client.publish(SERVO_TOPIC.c_str(), status);
 }
 
@@ -255,6 +281,7 @@ bool isMQ2ValueWarning(int gasValue)
 
 void warningMQ2ValueActions()
 {
+  reduceTimeAfterWarning();
   orangeLedOn();
 }
 
@@ -291,25 +318,10 @@ void increaseTimeAfterWarning()
 
 void doBuzzerActivation()
 {
-  if (!isBuzzerActive)
+  if (!isBuzzerActive && !userDeactivatedBuzzer)
   {
     publishBuzzerStatus(BUZZER_ON_MESSAGE);
-  }
-  if (!userDeactivatedBuzzer)
-  {
     isBuzzerActive = true;
-  }
-}
-
-void activateBuzzerIfNeeded()
-{
-  if (isBuzzerActive)
-  {
-    doBuzzerWarning();
-  }
-  else
-  {
-    stopBuzzerWarning();
   }
 }
 
@@ -318,7 +330,10 @@ void doBuzzerWarning()
   tone(PIN_BUZZER, melody[0], melodyDurations[0]);
 }
 
-void stopBuzzerWarning()
+void activateBuzzerIfNeeded()
 {
-  noTone(PIN_BUZZER);
+  if (isBuzzerActive)
+  {
+    doBuzzerWarning();
+  }
 }
