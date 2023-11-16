@@ -17,9 +17,11 @@ using namespace std;
 #define GOOD_GAS_VALUE 500
 #define WARNING_GAS_VALUE 1500
 #define TIME_TO_ACTIVATE_ALERTS 5
-#define GAS_READ_VALUE_DELAY 600
+#define WIFI_CONNECTION_DELAY 500
+#define GAS_READ_VALUE_DELAY 500
 #define MQ2_WARM_UP_TIME 20000
-#define PERSIST_MQTT_CONNECTION_DELAY 600
+#define PERSIST_MQTT_CONNECTION_DELAY 500
+#define RECONNECTION_DELAY 5000
 #define SERIAL_DELAY 1000
 #define MONITOR_SPEED 9600
 
@@ -39,15 +41,16 @@ const char *SSID = "";
 const char *PASSWORD = "";
 
 const string ID = "smargas_esp32_001";
+const string ID_ESP32_SERVO = "smargas_esp32_002";
 const string CLIENT_NAME = ID + "SmartGas client";
 
-const string BROKER = "test.mosquitto.org";
+const string BROKER = "192.168.204.206";
 const int PORT = 1883;
 
-const string BUZZER_TOPIC = "UdeA/SmartGas/Buzzer";
-const string BUZZER_STATUS_TOPIC = "UdeA/SmartGas/BuzzerStatus";
-const string MQ2_TOPIC = "UdeA/SmartGas/MQ2";
-const string SERVO_TOPIC = "UdeA/SmartGas/Servo";
+const string BUZZER_TOPIC = "UdeA/SmartGas/Buzzer/" + ID;
+const string BUZZER_STATUS_TOPIC = BUZZER_TOPIC + "/Status";
+const string MQ2_TOPIC = "UdeA/SmartGas/MQ2/" + ID;
+const string SERVO_TOPIC = "UdeA/SmartGas/Servo/" + ID_ESP32_SERVO;
 
 const char *BUZZER_ON_MESSAGE = "ON";
 const char *BUZZER_OFF_MESSAGE = "OFF";

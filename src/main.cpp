@@ -6,8 +6,8 @@ void blueLedOn();
 void connectWiFi();
 void createMQTTClient();
 void clientBuzzerCallback(char *topic, byte *payload, unsigned int length);
-void publishBuzzerStatus(const char *status);
 void stopBuzzerWarning();
+void publishBuzzerStatus(const char *status);
 void reconnectMQTTClient();
 void setupMQ2();
 void setupBuzzer();
@@ -19,7 +19,6 @@ bool isMQ2ValueGood(int gasValue);
 void goodMQ2ValueActions();
 void greenLedOn();
 void reduceTimeAfterWarning();
-void doBuzzerDeactivation();
 void publishServoStatus(const char *status);
 bool isMQ2ValueWarning(int gasValue);
 void warningMQ2ValueActions();
@@ -102,8 +101,9 @@ void connectWiFi()
   WiFi.begin(SSID, PASSWORD);
   while (WiFi.status() != WL_CONNECTED)
   {
+    blueLedOn();
     Serial.print(".");
-    delay(500);
+    delay(WIFI_CONNECTION_DELAY);
   }
   Serial.println();
   Serial.print(ID.c_str());
@@ -134,7 +134,6 @@ void clientBuzzerCallback(char *topic, byte *payload, unsigned int length)
   {
     Serial.println(response);
     stopBuzzerWarning();
-    publishBuzzerStatus(response.c_str());
     userDeactivatedBuzzer = true;
   }
   else
@@ -143,21 +142,23 @@ void clientBuzzerCallback(char *topic, byte *payload, unsigned int length)
   }
 }
 
-void publishBuzzerStatus(const char *status)
-{
-  client.publish(BUZZER_STATUS_TOPIC.c_str(), status);
-}
-
 void stopBuzzerWarning()
 {
   noTone(PIN_BUZZER);
+  publishBuzzerStatus(BUZZER_OFF_MESSAGE);
   isBuzzerActive = false;
+}
+
+void publishBuzzerStatus(const char *status)
+{
+  client.publish(BUZZER_STATUS_TOPIC.c_str(), status);
 }
 
 void reconnectMQTTClient()
 {
   while (!client.connected())
   {
+    blueLedOn();
     Serial.println("SmartGas >> Attempting MQTT connection...");
     if (client.connect(CLIENT_NAME.c_str()))
     {
@@ -169,7 +170,7 @@ void reconnectMQTTClient()
     {
       Serial.print("Retying in 5 seconds - failed, rc=");
       Serial.println(client.state());
-      delay(5000);
+      delay(RECONNECTION_DELAY);
     }
   }
 }
@@ -226,14 +227,14 @@ void goodMQ2ValueActions()
   {
     if (isBuzzerActive)
     {
-      doBuzzerDeactivation();
-      userDeactivatedBuzzer = false;
+      stopBuzzerWarning();
     }
     if (isServoActive)
     {
       publishServoStatus(SERVO_OFF_MESSAGE);
       isServoActive = false;
     }
+    userDeactivatedBuzzer = false;
   }
 }
 
@@ -256,16 +257,6 @@ void reduceTimeAfterWarning()
   if (timeAfterWarning > 0)
   {
     timeAfterWarning--;
-  }
-}
-
-void doBuzzerDeactivation()
-{
-  if (isBuzzerActive)
-  {
-    isBuzzerActive = false;
-    userDeactivatedBuzzer = false;
-    publishBuzzerStatus(BUZZER_OFF_MESSAGE);
   }
 }
 
